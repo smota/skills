@@ -1,8 +1,9 @@
-import { confirm, input, select } from '@vr_patel/tui';
+import { Box, confirm, input, select } from '@vr_patel/tui';
 import type { AgentType } from '../types.ts';
 import { CuiActions } from './actions.ts';
 import { CoreCuiBackend } from './core-backend.ts';
 import { formatInstalledSkills } from './list-view.ts';
+import type { CuiInstalledSkill, SkillLayer, SkillLayerFilter } from './types.ts';
 
 const MENU_OPTIONS = [
   'List all skills',
@@ -17,10 +18,19 @@ const MENU_OPTIONS = [
   'Exit',
 ] as const;
 
+const SKILL_ACTIONS = ['Update skill', 'Remove skill', 'Move skill', 'Back', 'Exit'] as const;
+
 type MenuOption = (typeof MENU_OPTIONS)[number];
+type SkillAction = (typeof SKILL_ACTIONS)[number];
 
 export interface CuiCliOptions {
   skipConfirmation: boolean;
+}
+
+interface ListContext {
+  layer: SkillLayerFilter;
+  agents?: AgentType[];
+  title: string;
 }
 
 export function parseCuiOptions(args: string[]): { options: CuiCliOptions; rest: string[] } {
@@ -54,8 +64,19 @@ Examples:
 `);
 }
 
-function printLines(lines: string[]): void {
-  for (const line of lines) console.log(line);
+function printWindow(title: string, instructions: string[], content: string[] = []): void {
+  const box = new Box({ title, borderStyle: 'round' });
+  const body = [
+    'Skills command center',
+    'Discover, install, update, move, and remove agent skills from one guided terminal UI.',
+    'Explore more skills at https://www.skills.sh/',
+    '',
+    'Keys: ↑/↓ or j/k to move • Enter to select • Ctrl+C to cancel • choose Exit to quit',
+    '',
+    ...instructions.map((line) => `• ${line}`),
+    ...(content.length > 0 ? ['', ...content] : []),
+  ].join('\n');
+  console.log(box.render(body));
 }
 
 function parseMenuSelection(args: string[]): { selection?: MenuOption; values: string[] } {
@@ -69,8 +90,13 @@ function parseMenuSelection(args: string[]): { selection?: MenuOption; values: s
 }
 
 async function promptMenu(): Promise<MenuOption> {
+  printWindow('Main menu', [
+    'Choose a command, then continue to the next relevant options.',
+    'Use Update skill here for the guided equivalent of `npx skills update`.',
+    'Exit is always available.',
+  ]);
   return select<MenuOption>({
-    message: 'skills CUI',
+    message: 'Command:',
     options: MENU_OPTIONS.map((option) => ({ label: option, value: option })),
   });
 }
@@ -92,29 +118,137 @@ async function confirmAction(
   return confirm({ message, defaultValue: false });
 }
 
-export async function runCui(args: string[] = []): Promise<void> {
-  if (args.includes('--help') || args.includes('-h')) {
-    showCuiHelp();
+function parseLayer(value: string, fallback: SkillLayer = 'project'): SkillLayer {
+  return value.trim() === 'global' ? 'global' : fallback;
+}
+
+function oppositeLayer(layer: SkillLayer): SkillLayer {
+  return layer === 'project' ? 'global' : 'project';
+}
+
+async function updateSkill(actions: CuiActions, skill: CuiInstalledSkill): Promise<void> {
+  const result = await actions.update({ names: [skill.name], layer: skill.layer });
+  console.log(result.message ?? 'Update complete.');
+}
+
+async function removeSkill(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  skill: CuiInstalledSkill
+): Promise<void> {
+  const ok = options.skipConfirmation
+    ? true
+    : await confirm({ message: `Remove ${skill.name} from ${skill.layer}?`, defaultValue: false });
+  if (!ok) {
+    console.log('Remove cancelled.');
     return;
   }
+  const result = await actions.remove({
+    names: [skill.name],
+    layer: skill.layer,
+    skipConfirmation: true,
+  });
+  console.log(result.message ?? 'Remove complete.');
+}
 
-  const { options, rest } = parseCuiOptions(args);
-  const { selection: parsedSelection, values } = parseMenuSelection(rest);
-  const actions = new CuiActions(new CoreCuiBackend());
-  const selection = parsedSelection ?? (await promptMenu());
+async function moveSkill(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  skill: CuiInstalledSkill
+): Promise<void> {
+  const toLayer = oppositeLayer(skill.layer);
+  const ok = options.skipConfirmation
+    ? true
+    : await confirm({ message: `Move ${skill.name} to ${toLayer}?`, defaultValue: false });
+  if (!ok) {
+    console.log('Move cancelled.');
+    return;
+  }
+  const result = await actions.move({
+    name: skill.name,
+    fromLayer: skill.layer,
+    toLayer,
+    skipConfirmation: true,
+  });
+  console.log(result.message ?? 'Move complete.');
+}
 
+async function promptSkillAction(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  skill: CuiInstalledSkill
+): Promise<'back' | 'exit'> {
+  printWindow('Skill actions', [`Selected: ${skill.name}`, `Layer: ${skill.layer}`]);
+  const action = await select<SkillAction>({
+    message: 'Next action:',
+    options: SKILL_ACTIONS.map((item) => ({ label: item, value: item })),
+  });
+
+  if (action === 'Exit') return 'exit';
+  if (action === 'Back') return 'back';
+  if (action === 'Update skill') await updateSkill(actions, skill);
+  if (action === 'Remove skill') await removeSkill(actions, options, skill);
+  if (action === 'Move skill') await moveSkill(actions, options, skill);
+  return 'back';
+}
+
+async function showListFlow(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  context: ListContext,
+  interactive: boolean
+): Promise<'continue' | 'exit'> {
+  const skills = await actions.list({ layer: context.layer, agents: context.agents });
+  printWindow(
+    context.title,
+    ['Review installed skills.', 'Select one skill for update/remove/move, or exit.'],
+    formatInstalledSkills(skills)
+  );
+
+  if (!interactive) return 'continue';
+  if (skills.length === 0) return 'continue';
+
+  const selected = await select<string>({
+    message: 'Skill:',
+    options: [
+      ...skills.map((skill) => ({
+        label: skill.name,
+        value: skill.name,
+        description: `${skill.layer} — ${skill.agents.join(', ') || 'not linked'}`,
+      })),
+      { label: 'Back', value: '__back' },
+      { label: 'Exit', value: '__exit' },
+    ],
+  });
+
+  if (selected === '__exit') return 'exit';
+  if (selected === '__back') return 'continue';
+  const skill = skills.find((item) => item.name === selected);
+  if (!skill) return 'continue';
+  return (await promptSkillAction(actions, options, skill)) === 'exit' ? 'exit' : 'continue';
+}
+
+async function runSingleCommand(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  selection: MenuOption,
+  values: string[]
+): Promise<void> {
   if (selection === 'List all skills') {
-    printLines(formatInstalledSkills(await actions.list({ layer: 'all' })));
+    await showListFlow(actions, options, { layer: 'all', title: 'All skills' }, false);
   } else if (selection === 'List project skills') {
-    printLines(formatInstalledSkills(await actions.list({ layer: 'project' }), ['project']));
+    await showListFlow(actions, options, { layer: 'project', title: 'Project skills' }, false);
   } else if (selection === 'List global skills') {
-    printLines(formatInstalledSkills(await actions.list({ layer: 'global' }), ['global']));
+    await showListFlow(actions, options, { layer: 'global', title: 'Global skills' }, false);
   } else if (selection === 'Filter by agent') {
     const agent = (
       await readField(values, 0, 'Agent id (for example: claude-code, codex, cursor):')
     ).trim();
-    printLines(
-      formatInstalledSkills(await actions.list({ layer: 'all', agents: [agent as AgentType] }))
+    await showListFlow(
+      actions,
+      options,
+      { layer: 'all', agents: [agent as AgentType], title: `Skills for ${agent}` },
+      false
     );
   } else if (selection === 'Update skill') {
     const name = (await readField(values, 0, 'Skill name:')).trim();
@@ -124,28 +258,28 @@ export async function runCui(args: string[] = []): Promise<void> {
     console.log(result.message ?? 'Update complete.');
   } else if (selection === 'Remove skill') {
     const name = (await readField(values, 0, 'Skill name:')).trim();
-    const layerInput = (await readField(values, 1, 'Layer (project or global):')).trim();
+    const layer = parseLayer(await readField(values, 1, 'Layer (project or global):'));
     const ok = await confirmAction(options, values, 2, 'remove', `Remove ${name}?`);
     if (!ok) {
       console.log('Remove cancelled.');
       return;
     }
-    const layer = layerInput === 'global' ? 'global' : 'project';
     const result = await actions.remove({ names: [name], layer, skipConfirmation: true });
     console.log(result.message ?? 'Remove complete.');
   } else if (selection === 'Move skill') {
     const name = (await readField(values, 0, 'Skill name:')).trim();
-    const fromLayerInput = (
-      await readField(values, 1, 'Current layer (project or global):')
-    ).trim();
+    const fromLayer = parseLayer(await readField(values, 1, 'Current layer (project or global):'));
     const ok = await confirmAction(options, values, 2, 'move', `Move ${name} to the other layer?`);
     if (!ok) {
       console.log('Move cancelled.');
       return;
     }
-    const fromLayer = fromLayerInput === 'global' ? 'global' : 'project';
-    const toLayer = fromLayer === 'project' ? 'global' : 'project';
-    const result = await actions.move({ name, fromLayer, toLayer, skipConfirmation: true });
+    const result = await actions.move({
+      name,
+      fromLayer,
+      toLayer: oppositeLayer(fromLayer),
+      skipConfirmation: true,
+    });
     console.log(result.message ?? 'Move complete.');
   } else if (selection === 'Search skills') {
     console.log('Search flow will be implemented in the CUI search/install feature.');
@@ -154,8 +288,53 @@ export async function runCui(args: string[] = []): Promise<void> {
   } else {
     console.log('Goodbye.');
   }
+}
 
-  if (options.skipConfirmation) {
-    console.log('Confirmation prompts are disabled for destructive CUI actions.');
+export async function runCui(args: string[] = []): Promise<void> {
+  if (args.includes('--help') || args.includes('-h')) {
+    showCuiHelp();
+    return;
+  }
+
+  const { options, rest } = parseCuiOptions(args);
+  const { selection: parsedSelection, values } = parseMenuSelection(rest);
+  const actions = new CuiActions(new CoreCuiBackend());
+
+  if (parsedSelection) {
+    await runSingleCommand(actions, options, parsedSelection, values);
+    if (options.skipConfirmation) {
+      console.log('Confirmation prompts are disabled for destructive CUI actions.');
+    }
+    return;
+  }
+
+  while (true) {
+    const selection = await promptMenu();
+    if (selection === 'Exit') {
+      console.log('Goodbye.');
+      return;
+    }
+    const result = await (async () => {
+      if (selection === 'List all skills')
+        return showListFlow(actions, options, { layer: 'all', title: 'All skills' }, true);
+      if (selection === 'List project skills')
+        return showListFlow(actions, options, { layer: 'project', title: 'Project skills' }, true);
+      if (selection === 'List global skills')
+        return showListFlow(actions, options, { layer: 'global', title: 'Global skills' }, true);
+      if (selection === 'Filter by agent') {
+        const agent = (
+          await input({ message: 'Agent id (for example: claude-code, codex, cursor):' })
+        ).trim();
+        return showListFlow(
+          actions,
+          options,
+          { layer: 'all', agents: [agent as AgentType], title: `Skills for ${agent}` },
+          true
+        );
+      }
+      await runSingleCommand(actions, options, selection, []);
+      return 'continue' as const;
+    })();
+    if (result === 'exit') return;
   }
 }
