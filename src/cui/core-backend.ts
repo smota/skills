@@ -85,12 +85,31 @@ export class CoreCuiBackend implements CuiBackend {
     return { ok: true };
   }
 
-  async move(_request: CuiMoveRequest): Promise<CuiActionResult> {
-    return {
-      ok: false,
-      message:
-        'Moving skills between layers will be implemented with the installed-skill actions flow.',
-    };
+  async move(request: CuiMoveRequest): Promise<CuiActionResult> {
+    const matchingSkill = (
+      await this.list({ layer: request.fromLayer, agents: request.agents })
+    ).find((skill) => skill.name === request.name);
+
+    if (!matchingSkill?.path) {
+      return {
+        ok: false,
+        message: `Could not find ${request.name} in ${request.fromLayer} skills.`,
+      };
+    }
+
+    await this.install({
+      source: matchingSkill.path,
+      layer: request.toLayer,
+      agents: request.agents ?? matchingSkill.agents,
+    });
+    await this.remove({
+      names: [request.name],
+      layer: request.fromLayer,
+      agents: request.agents,
+      skipConfirmation: request.skipConfirmation,
+    });
+
+    return { ok: true, message: `Moved ${request.name} to ${request.toLayer}.` };
   }
 
   async detectAgents() {

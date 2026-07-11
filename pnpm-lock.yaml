@@ -8,9 +8,9 @@ importers:
 
   .:
     dependencies:
-      cui:
-        specifier: ^0.0.10
-        version: 0.0.10
+      '@vr_patel/tui':
+        specifier: ^1.0.0
+        version: 1.0.0
       yaml:
         specifier: ^2.8.3
         version: 2.9.0
@@ -278,6 +278,10 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
+  '@vr_patel/tui@1.0.0':
+    resolution: {integrity: sha512-HuPZpOoJJgsiKe5jxGnqKznuAw2S2p/XH6d4aYdP+QRxDGXORzYXdMc2X+iGOk0+OORzhyy9+IdTMjXFzKMlpA==}
+    engines: {node: '>=18'}
+
   ansi-escapes@7.3.0:
     resolution: {integrity: sha512-BvU8nYgGQBxcmMuEeUEmNTvrMVjJNSH7RgW24vXexN4Ven6qCvy4TntnvlnwnMLTVlcRQQdbRY8NKnaIoeWDNg==}
     engines: {node: '>=18'}
@@ -352,9 +356,6 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
-
-  cui@0.0.10:
-    resolution: {integrity: sha512-YWouMRP56iXpvTJP5dSSBn6Y+XVQbKAPTvh8jGIah5fci7vInoHz45vwQZ2YeX2I1gCANB67wIQ61NitxdyT6g==}
 
   debug@4.4.3:
     resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
@@ -1005,6 +1006,8 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
+  '@vr_patel/tui@1.0.0': {}
+
   ansi-escapes@7.3.0:
     dependencies:
       environment: 1.1.0
@@ -1056,8 +1059,6 @@ snapshots:
   consola@3.4.2: {}
 
   convert-source-map@2.0.0: {}
-
-  cui@0.0.10: {}
 
   debug@4.4.3:
     dependencies:

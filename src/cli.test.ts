@@ -97,6 +97,16 @@ describe('skills CLI', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('Confirmation prompts are disabled');
     });
+
+    it('should require confirmation before removing or moving skills', () => {
+      const removeResult = runCli(['cui', 'Remove skill', 'demo', 'project', 'nope']);
+      expect(removeResult.exitCode).toBe(0);
+      expect(removeResult.stdout).toContain('Remove cancelled.');
+
+      const moveResult = runCli(['cui', 'Move skill', 'demo', 'project', 'nope']);
+      expect(moveResult.exitCode).toBe(0);
+      expect(moveResult.stdout).toContain('Move cancelled.');
+    });
   });
 
   describe('unknown command', () => {

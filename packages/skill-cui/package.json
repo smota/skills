@@ -11,7 +11,7 @@
     "README.md"
   ],
   "dependencies": {
-    "cui": "^0.0.10"
+    "@vr_patel/tui": "^1.0.0"
   },
   "license": "MIT"
 }

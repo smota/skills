@@ -10,7 +10,7 @@ describe('skill-cui package', () => {
 
     expect(pkg.name).toBe('skill-cui');
     expect(pkg.bin).toEqual({ 'skill-cui': './bin/skill-cui.mjs' });
-    expect(pkg.dependencies).toEqual({ cui: '^0.0.10' });
+    expect(pkg.dependencies).toEqual({ '@vr_patel/tui': '^1.0.0' });
   });
 
   it('ships the executable and does not import private skills internals', () => {
