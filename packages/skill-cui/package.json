@@ -1,0 +1,17 @@
+{
+  "name": "skill-cui",
+  "version": "0.0.0",
+  "description": "Standalone CUI for the skills CLI",
+  "type": "module",
+  "bin": {
+    "skill-cui": "./bin/skill-cui.mjs"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "dependencies": {
+    "cui": "^0.0.10"
+  },
+  "license": "MIT"
+}
