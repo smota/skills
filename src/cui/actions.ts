@@ -90,4 +90,8 @@ export class CuiActions {
     }
     return this.backend.move({ ...request, name });
   }
+
+  async detectAgents() {
+    return this.backend.detectAgents?.() ?? [];
+  }
 }

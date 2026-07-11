@@ -87,7 +87,12 @@ describe('CuiActions', () => {
     const backend = mockBackend();
     const actions = new CuiActions(backend);
 
-    await actions.install({ source: ' owner/repo ', layer: 'project', agents: ['codex'] });
+    await actions.install({
+      source: ' owner/repo ',
+      layer: 'project',
+      agents: ['codex'],
+      skills: ['lint'],
+    });
     await actions.update({ names: ['lint'], layer: 'project' });
     await actions.remove({ names: ['lint'], layer: 'project', skipConfirmation: true });
     await actions.move({ name: 'lint', fromLayer: 'project', toLayer: 'global' });
@@ -96,6 +101,7 @@ describe('CuiActions', () => {
       source: 'owner/repo',
       layer: 'project',
       agents: ['codex'],
+      skills: ['lint'],
     });
     expect(backend.update).toHaveBeenCalledWith({ names: ['lint'], layer: 'project' });
     expect(backend.remove).toHaveBeenCalledWith({

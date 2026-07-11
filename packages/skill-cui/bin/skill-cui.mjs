@@ -137,6 +137,28 @@ async function moveSkill(name, fromLayer, skipConfirmation) {
   return toLayer;
 }
 
+function parseAgentSelection(value) {
+  return value
+    .split(',')
+    .map((agent) => agent.trim())
+    .filter(Boolean);
+}
+
+async function installFromSource(values, source) {
+  const layerInput = (
+    await readField(values, 1, 'Layer (project or global, default project):')
+  ).trim();
+  const agentInput = (await readField(values, 2, 'Agents comma-separated:')).trim();
+  const agents = parseAgentSelection(agentInput);
+  if (agents.length === 0) throw new Error(`Select at least one agent to install ${source}.`);
+
+  const args = ['add', source, '--yes'];
+  if (layerInput === 'global') args.push('--global');
+  for (const agent of agents) args.push('--agent', agent);
+  await runSkills(args);
+  console.log(`Installed from ${source}.`);
+}
+
 function formatSkills(skills, layers = ['project', 'global']) {
   const lines = [];
   for (const layer of layers) {
@@ -276,9 +298,20 @@ async function runSingleCommand(options, selection, values) {
     }
     console.log(`Moved to ${await moveSkill(name, fromLayer, true)}.`);
   } else if (selection === 'Search skills') {
-    console.log('Search flow will be implemented in the standalone CUI search/install feature.');
+    const query = (await readField(values, 0, 'Search keywords:')).trim();
+    if (!query) {
+      console.log(
+        'Standalone search requires keywords. Run `npx skills find` for open interactive search.'
+      );
+      return;
+    }
+    const { stdout } = await runSkills(['find', query]);
+    console.log(stdout || 'Search complete.');
   } else if (selection === 'Install skill') {
-    console.log('Install flow will be implemented in the standalone CUI search/install feature.');
+    const source = (
+      await readField(values, 0, 'Folder, GitHub shorthand, git URL, or full URL:')
+    ).trim();
+    await installFromSource(values, source);
   } else {
     console.log('Goodbye.');
   }
@@ -318,6 +351,25 @@ async function main() {
           await input({ message: 'Agent id (for example: claude-code, codex, cursor):' })
         ).trim();
         return showListFlow(options, { layer: 'all', agent, title: `Skills for ${agent}` }, true);
+      }
+      if (selection === 'Search skills') {
+        const query = (await input({ message: 'Search keywords:' })).trim();
+        if (!query) {
+          console.log(
+            'Standalone search requires keywords. Run `npx skills find` for open interactive search.'
+          );
+          return 'continue';
+        }
+        const { stdout } = await runSkills(['find', query]);
+        console.log(stdout || 'Search complete.');
+        return 'continue';
+      }
+      if (selection === 'Install skill') {
+        const source = (
+          await input({ message: 'Folder, GitHub shorthand, git URL, or full URL:' })
+        ).trim();
+        await installFromSource([], source);
+        return 'continue';
       }
       await runSingleCommand(options, selection, []);
       return 'continue';

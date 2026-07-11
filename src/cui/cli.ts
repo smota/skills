@@ -3,7 +3,13 @@ import type { AgentType } from '../types.ts';
 import { CuiActions } from './actions.ts';
 import { CoreCuiBackend } from './core-backend.ts';
 import { formatInstalledSkills } from './list-view.ts';
-import type { CuiInstalledSkill, SkillLayer, SkillLayerFilter } from './types.ts';
+import type {
+  CuiAgentOption,
+  CuiInstalledSkill,
+  CuiSearchResult,
+  SkillLayer,
+  SkillLayerFilter,
+} from './types.ts';
 
 const MENU_OPTIONS = [
   'List all skills',
@@ -124,6 +130,97 @@ function parseLayer(value: string, fallback: SkillLayer = 'project'): SkillLayer
 
 function oppositeLayer(layer: SkillLayer): SkillLayer {
   return layer === 'project' ? 'global' : 'project';
+}
+
+function parseAgentSelection(value: string): AgentType[] {
+  return value
+    .split(',')
+    .map((agent) => agent.trim())
+    .filter(Boolean) as AgentType[];
+}
+
+async function defaultDetectedAgents(actions: CuiActions): Promise<AgentType[]> {
+  const detected = (await actions.detectAgents?.()) ?? [];
+  return detected.filter((agent: CuiAgentOption) => agent.detected).map((agent) => agent.id);
+}
+
+async function promptInstallOptions(
+  actions: CuiActions,
+  values: string[],
+  source: string
+): Promise<{ layer: SkillLayer; agents: AgentType[] }> {
+  const layerInput = (
+    await readField(values, 1, 'Layer (project or global, default project):')
+  ).trim();
+  const layer = parseLayer(layerInput || 'project');
+  const detectedAgents = await defaultDetectedAgents(actions);
+  const defaultAgents = detectedAgents.join(',');
+  const agentInput = (
+    await readField(
+      values,
+      2,
+      `Agents comma-separated${defaultAgents ? ` (default ${defaultAgents})` : ''}:`
+    )
+  ).trim();
+  const agents = parseAgentSelection(agentInput || defaultAgents);
+  if (agents.length === 0) throw new Error(`Select at least one agent to install ${source}.`);
+  return { layer, agents };
+}
+
+function formatSearchResults(results: CuiSearchResult[]): string[] {
+  if (results.length === 0) return ['No matching skills found.'];
+  return results.map((result) => {
+    const installs = result.installs === undefined ? '' : ` — ${result.installs} install(s)`;
+    return `- ${result.name} — ${result.source}${installs}`;
+  });
+}
+
+async function installFromSource(
+  actions: CuiActions,
+  values: string[],
+  source: string,
+  skills?: string[]
+): Promise<void> {
+  const { layer, agents } = await promptInstallOptions(actions, values, source);
+  const result = await actions.install({ source, layer, agents, skills });
+  console.log(result.message ?? `Installed from ${source}.`);
+}
+
+async function showSearchFlow(
+  actions: CuiActions,
+  values: string[],
+  interactive: boolean
+): Promise<'continue' | 'exit'> {
+  const query = (
+    await readField(values, 0, 'Search keywords (leave blank for open search):')
+  ).trim();
+  const results = await actions.search({ query });
+  printWindow(
+    'Search skills',
+    ['Review search results.', 'Select a result to install, or exit.'],
+    formatSearchResults(results)
+  );
+  if (!interactive || results.length === 0) return 'continue';
+
+  const selected = await select<string>({
+    message: 'Search result:',
+    options: [
+      ...results.map((result, index) => ({
+        label: result.name,
+        value: String(index),
+        description: result.source,
+      })),
+      { label: 'Back', value: '__back' },
+      { label: 'Exit', value: '__exit' },
+    ],
+  });
+
+  if (selected === '__exit') return 'exit';
+  if (selected === '__back') return 'continue';
+  const result = results[Number(selected)];
+  if (!result) return 'continue';
+  await installFromSource(actions, [], result.source, [result.name]);
+  return 'continue';
 }
 
 async function updateSkill(actions: CuiActions, skill: CuiInstalledSkill): Promise<void> {
@@ -282,9 +379,12 @@ async function runSingleCommand(
     });
     console.log(result.message ?? 'Move complete.');
   } else if (selection === 'Search skills') {
-    console.log('Search flow will be implemented in the CUI search/install feature.');
+    await showSearchFlow(actions, values, false);
   } else if (selection === 'Install skill') {
-    console.log('Install flow will be implemented in the CUI search/install feature.');
+    const source = (
+      await readField(values, 0, 'Folder, GitHub shorthand, git URL, or full URL:')
+    ).trim();
+    await installFromSource(actions, values, source);
   } else {
     console.log('Goodbye.');
   }
@@ -331,6 +431,14 @@ export async function runCui(args: string[] = []): Promise<void> {
           { layer: 'all', agents: [agent as AgentType], title: `Skills for ${agent}` },
           true
         );
+      }
+      if (selection === 'Search skills') return showSearchFlow(actions, [], true);
+      if (selection === 'Install skill') {
+        const source = (
+          await input({ message: 'Folder, GitHub shorthand, git URL, or full URL:' })
+        ).trim();
+        await installFromSource(actions, [], source);
+        return 'continue' as const;
       }
       await runSingleCommand(actions, options, selection, []);
       return 'continue' as const;
