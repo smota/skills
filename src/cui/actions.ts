@@ -46,7 +46,11 @@ export function filterInstalledSkills(
 }
 
 export class CuiActions {
-  constructor(private readonly backend: CuiBackend) {}
+  private readonly backend: CuiBackend;
+
+  constructor(backend: CuiBackend) {
+    this.backend = backend;
+  }
 
   async list(request: CuiListRequest = {}): Promise<CuiInstalledSkill[]> {
     return filterInstalledSkills(await this.backend.list(request), request);

@@ -140,6 +140,7 @@
   },
   "packageManager": "pnpm@10.17.1",
   "dependencies": {
+    "cui": "^0.0.10",
     "yaml": "^2.8.3"
   }
 }
