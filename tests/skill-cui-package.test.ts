@@ -23,4 +23,12 @@ describe('skill-cui package', () => {
     expect(source).not.toContain("from '../../src");
     expect(source).not.toContain("from '../src");
   });
+
+  it('documents standalone behavior and safety', () => {
+    const readme = readFileSync(join(packageDir, 'README.md'), 'utf-8');
+
+    expect(readme).toContain('npx skill-cui');
+    expect(readme).toContain('public `npx skills` command');
+    expect(readme).toContain('--no-confirmation');
+  });
 });

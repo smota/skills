@@ -34,3 +34,25 @@ The core backend should call existing repository modules directly where possible
 ### Standalone `skill-cui`
 
 The standalone backend must not import private core internals. It should invoke the public `npx skills` command with explicit arguments and parse structured output where available. Today `skills list --json` is the primary structured command; if search, update, or remove need structured output for reliable standalone behavior, add that support deliberately in the relevant feature issue instead of parsing fragile terminal text.
+
+## Manual validation scenarios
+
+```bash
+pnpm dev cui --help
+pnpm dev cui Exit
+pnpm dev cui "List all skills"
+pnpm dev cui "Filter by agent" codex
+pnpm dev cui "Search skills" typescript
+pnpm dev cui "Remove skill" demo project nope
+node packages/skill-cui/bin/skill-cui.mjs --help
+node packages/skill-cui/bin/skill-cui.mjs Exit
+node packages/skill-cui/bin/skill-cui.mjs "List project skills"
+```
+
+Before opening a PR, run the focused CUI checks plus the repository validation commands:
+
+```bash
+pnpm test src/cui/actions.test.ts src/cui/cli.test.ts src/cui/list-view.test.ts src/cli.test.ts tests/skill-cui-package.test.ts
+pnpm test
+pnpm build
+```
