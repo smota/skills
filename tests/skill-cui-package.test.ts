@@ -11,8 +11,8 @@ describe('skill-cui package', () => {
     expect(pkg.name).toBe('skill-cui');
     expect(pkg.version).not.toBe('0.0.0');
     expect(pkg.bin).toEqual({ 'skill-cui': './bin/skill-cui.mjs' });
-    expect(pkg.files).toEqual(['bin', 'README.md']);
-    expect(pkg.dependencies).toEqual({ '@vr_patel/tui': '^1.0.0' });
+    expect(pkg.files).toEqual(['bin', 'lib', 'README.md']);
+    expect(pkg.dependencies).toBeUndefined();
     expect(pkg.repository).toEqual({
       type: 'git',
       url: 'git+https://github.com/smota/skills.git',
@@ -39,6 +39,12 @@ describe('skill-cui package', () => {
     expect(source).toContain('skills');
     expect(source).not.toContain("from '../../src");
     expect(source).not.toContain("from '../src");
+    expect(source).not.toContain('@vr_patel' + '/tui');
+
+    const helperPath = join(packageDir, 'lib', 'terminal-ui.mjs');
+    const helperSource = readFileSync(helperPath, 'utf-8');
+    expect(existsSync(helperPath)).toBe(true);
+    expect(helperSource).not.toContain('@vr_patel' + '/tui');
   });
 
   it('documents standalone behavior and safety', () => {

@@ -8,6 +8,7 @@
   },
   "files": [
     "bin",
+    "lib",
     "README.md"
   ],
   "repository": {
@@ -34,9 +35,6 @@
   ],
   "engines": {
     "node": ">=18"
-  },
-  "dependencies": {
-    "@vr_patel/tui": "^1.0.0"
   },
   "license": "MIT"
 }

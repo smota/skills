@@ -10,7 +10,6 @@ import { join } from 'path';
 
 // Dependencies that get bundled into the CLI
 const BUNDLED_PACKAGES = [
-  '@vr_patel/tui',
   '@clack/prompts',
   '@clack/core',
   'picocolors',

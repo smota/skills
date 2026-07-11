@@ -2,7 +2,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { Box, confirm, input, select } from '@vr_patel/tui';
+import { colors, confirmPrompt, inputPrompt, renderBox, selectPrompt } from '../lib/terminal-ui.mjs';
 
 const execFileAsync = promisify(execFile);
 const MENU_OPTIONS = [
@@ -48,19 +48,21 @@ Examples:
 `);
 }
 
+function center(text, width = 72) {
+  const padding = Math.max(0, Math.floor((width - text.length) / 2));
+  return `${' '.repeat(padding)}${text}`;
+}
+
 function printWindow(title, instructions, content = []) {
-  const box = new Box({ title, borderStyle: 'round' });
   const body = [
-    'Skills command center',
-    'Discover, install, update, move, and remove agent skills from one guided terminal UI.',
-    'Explore more skills at https://www.skills.sh/',
+    colors.cyan(center('SKILLS COMMAND CENTER')),
+    colors.gray('Discover, install, update, move, and remove agent skills from one guided terminal UI.'),
+    colors.blue('Explore more skills at https://www.skills.sh/'),
     '',
-    'Keys: ↑/↓ or j/k to move • Enter to select • Ctrl+C to cancel • choose Exit to quit',
-    '',
-    ...instructions.map((line) => `• ${line}`),
+    ...instructions,
     ...(content.length ? ['', ...content] : []),
   ].join('\n');
-  console.log(box.render(body));
+  console.log(renderBox(title.toUpperCase(), body));
 }
 
 function parseMenuSelection(args) {
@@ -77,7 +79,7 @@ async function promptMenu() {
     'Use Update skill here for the guided equivalent of `npx skills update`.',
     'Exit is always available.',
   ]);
-  return select({
+  return selectPrompt({
     message: 'Command:',
     options: MENU_OPTIONS.map((option) => ({ label: option, value: option })),
   });
@@ -185,13 +187,13 @@ function printLines(lines) {
 
 async function readField(args, index, message) {
   if (args[index] !== undefined) return args[index];
-  return input({ message });
+  return inputPrompt({ message });
 }
 
 async function confirmAction(options, args, index, word, message) {
   if (options.skipConfirmation) return true;
   if (args[index] !== undefined) return args[index] === word;
-  return confirm({ message, defaultValue: false });
+  return confirmPrompt({ message, defaultValue: false });
 }
 
 function parseLayer(value, fallback = 'project') {
@@ -204,7 +206,7 @@ function oppositeLayer(layer) {
 
 async function promptSkillAction(options, skill) {
   printWindow('Skill actions', [`Selected: ${skill.name}`, `Layer: ${skill.layer}`]);
-  const action = await select({
+  const action = await selectPrompt({
     message: 'Next action:',
     options: SKILL_ACTIONS.map((item) => ({ label: item, value: item })),
   });
@@ -217,7 +219,7 @@ async function promptSkillAction(options, skill) {
   if (action === 'Remove skill') {
     const ok =
       options.skipConfirmation ||
-      (await confirm({ message: `Remove ${skill.name}?`, defaultValue: false }));
+      (await confirmPrompt({ message: `Remove ${skill.name}?`, defaultValue: false }));
     if (!ok) console.log('Remove cancelled.');
     else {
       await removeSkill(skill.name, skill.layer, true);
@@ -228,7 +230,7 @@ async function promptSkillAction(options, skill) {
     const toLayer = oppositeLayer(skill.layer);
     const ok =
       options.skipConfirmation ||
-      (await confirm({ message: `Move ${skill.name} to ${toLayer}?`, defaultValue: false }));
+      (await confirmPrompt({ message: `Move ${skill.name} to ${toLayer}?`, defaultValue: false }));
     if (!ok) console.log('Move cancelled.');
     else console.log(`Moved to ${await moveSkill(skill.name, skill.layer, true)}.`);
   }
@@ -243,7 +245,7 @@ async function showListFlow(options, context, interactive) {
     formatSkills(skills)
   );
   if (!interactive || skills.length === 0) return 'continue';
-  const selected = await select({
+  const selected = await selectPrompt({
     message: 'Skill:',
     options: [
       ...skills.map((skill) => ({
@@ -349,12 +351,12 @@ async function main() {
         return showListFlow(options, { layer: 'global', title: 'Global skills' }, true);
       if (selection === 'Filter by agent') {
         const agent = (
-          await input({ message: 'Agent id (for example: claude-code, codex, cursor):' })
+          await inputPrompt({ message: 'Agent id (for example: claude-code, codex, cursor):' })
         ).trim();
         return showListFlow(options, { layer: 'all', agent, title: `Skills for ${agent}` }, true);
       }
       if (selection === 'Search skills') {
-        const query = (await input({ message: 'Search keywords:' })).trim();
+        const query = (await inputPrompt({ message: 'Search keywords:' })).trim();
         if (!query) {
           console.log(
             'Standalone search requires keywords. Run `npx skills find` for open interactive search.'
@@ -367,7 +369,7 @@ async function main() {
       }
       if (selection === 'Install skill') {
         const source = (
-          await input({ message: 'Folder, GitHub shorthand, git URL, or full URL:' })
+          await inputPrompt({ message: 'Folder, GitHub shorthand, git URL, or full URL:' })
         ).trim();
         await installFromSource([], source);
         return 'continue';

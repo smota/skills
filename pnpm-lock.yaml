@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@vr_patel/tui':
-        specifier: ^1.0.0
-        version: 1.0.0
       yaml:
         specifier: ^2.8.3
         version: 2.9.0
@@ -55,11 +52,7 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0
 
-  packages/skill-cui:
-    dependencies:
-      '@vr_patel/tui':
-        specifier: ^1.0.0
-        version: 1.0.0
+  packages/skill-cui: {}
 
 packages:
 
@@ -283,10 +276,6 @@ packages:
 
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
-
-  '@vr_patel/tui@1.0.0':
-    resolution: {integrity: sha512-HuPZpOoJJgsiKe5jxGnqKznuAw2S2p/XH6d4aYdP+QRxDGXORzYXdMc2X+iGOk0+OORzhyy9+IdTMjXFzKMlpA==}
-    engines: {node: '>=18'}
 
   ansi-escapes@7.3.0:
     resolution: {integrity: sha512-BvU8nYgGQBxcmMuEeUEmNTvrMVjJNSH7RgW24vXexN4Ven6qCvy4TntnvlnwnMLTVlcRQQdbRY8NKnaIoeWDNg==}
@@ -1011,8 +1000,6 @@ snapshots:
       '@vitest/pretty-format': 4.1.10
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
-
-  '@vr_patel/tui@1.0.0': {}
 
   ansi-escapes@7.3.0:
     dependencies:

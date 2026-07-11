@@ -1,9 +1,15 @@
-import { Box, confirm, fg, input, style } from '@vr_patel/tui';
 import type { AgentType } from '../types.ts';
 import { CuiActions } from './actions.ts';
 import { CoreCuiBackend } from './core-backend.ts';
 import { formatInstalledSkills, formatSkillDetails } from './list-view.ts';
 import { cuiMultiSelectPrompt, cuiSelectPrompt } from './select-prompt.ts';
+import {
+  color,
+  colors,
+  confirmPrompt as terminalConfirmPrompt,
+  inputPrompt as terminalInputPrompt,
+  renderBox,
+} from './terminal-ui.ts';
 import type {
   CuiAgentOption,
   CuiInstalledSkill,
@@ -91,30 +97,24 @@ Examples:
 `);
 }
 
-function color(text: string, ...codes: string[]): string {
-  if (!process.stdout.isTTY || process.env.NO_COLOR) return text;
-  return `${codes.join('')}${text}${style.reset}`;
-}
-
 function center(text: string, width = 72): string {
   const padding = Math.max(0, Math.floor((width - text.length) / 2));
   return `${' '.repeat(padding)}${text}`;
 }
 
 function printWindow(title: string, instructions: string[], content: string[] = []): void {
-  const box = new Box({ title: title.toUpperCase(), borderStyle: 'round' });
   const body = [
-    color(center('SKILLS COMMAND CENTER'), fg.cyan, style.bold),
+    color(center('SKILLS COMMAND CENTER'), colors.cyan),
     color(
       'Discover, install, update, move, and remove agent skills from one guided terminal UI.',
-      fg.gray
+      colors.gray
     ),
-    color('Explore more skills at https://www.skills.sh/', fg.blue),
+    color('Explore more skills at https://www.skills.sh/', colors.blue),
     '',
     ...instructions,
     ...(content.length > 0 ? ['', ...content] : []),
   ].join('\n');
-  console.log(box.render(body));
+  console.log(renderBox(title.toUpperCase(), body));
 }
 
 class CuiPromptCancel extends Error {
@@ -130,45 +130,18 @@ function isCancelError(error: unknown): boolean {
   );
 }
 
-async function withEscCancel<T>(prompt: Promise<T>): Promise<T> {
-  const stdin = process.stdin;
-  let active = true;
-  return new Promise<T>((resolve, reject) => {
-    const onEsc = (key: Buffer | string) => {
-      if (String(key) !== '\x1b') return;
-      active = false;
-      stdin.removeListener('data', onEsc);
-      stdin.emit('data', '\x03');
-      reject(new CuiPromptCancel());
-    };
-    setImmediate(() => {
-      if (active) stdin.on('data', onEsc);
-    });
-    prompt.then(
-      (value) => {
-        active = false;
-        stdin.removeListener('data', onEsc);
-        resolve(value);
-      },
-      (error) => {
-        active = false;
-        stdin.removeListener('data', onEsc);
-        reject(error);
-      }
-    );
-  });
-}
-
 async function selectPrompt<T>(config: Parameters<typeof cuiSelectPrompt<T>>[0]): Promise<T> {
   return cuiSelectPrompt<T>(config);
 }
 
-async function inputPrompt(config: Parameters<typeof input>[0]): Promise<string> {
-  return withEscCancel(input(config));
+async function inputPrompt(config: Parameters<typeof terminalInputPrompt>[0]): Promise<string> {
+  return terminalInputPrompt(config);
 }
 
-async function confirmPrompt(config: Parameters<typeof confirm>[0]): Promise<boolean> {
-  return withEscCancel(confirm(config));
+async function confirmPrompt(
+  config: Parameters<typeof terminalConfirmPrompt>[0]
+): Promise<boolean> {
+  return terminalConfirmPrompt(config);
 }
 
 function parseMenuSelection(args: string[]): { selection?: MenuOption; values: string[] } {
@@ -189,7 +162,7 @@ async function promptMenu(status?: string): Promise<MenuOption | 'cancel'> {
       'Skill-specific update, remove, and move actions are available after selecting a listed skill.',
       'Press Esc or choose Exit to quit.',
     ],
-    status ? [color(`Status: ${status}`, fg.green)] : []
+    status ? [color(`Status: ${status}`, colors.green)] : []
   );
   try {
     return await selectPrompt<MenuOption>({

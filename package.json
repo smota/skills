@@ -140,7 +140,6 @@
   },
   "packageManager": "pnpm@10.17.1",
   "dependencies": {
-    "@vr_patel/tui": "^1.0.0",
     "yaml": "^2.8.3"
   }
 }
