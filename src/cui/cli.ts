@@ -1,4 +1,4 @@
-import { Box, confirm, input, select } from '@vr_patel/tui';
+import { Box, confirm, fg, input, select, style } from '@vr_patel/tui';
 import type { AgentType } from '../types.ts';
 import { CuiActions } from './actions.ts';
 import { CoreCuiBackend } from './core-backend.ts';
@@ -11,7 +11,7 @@ import type {
   SkillLayerFilter,
 } from './types.ts';
 
-const MENU_OPTIONS = [
+const COMMAND_OPTIONS = [
   'List all skills',
   'List project skills',
   'List global skills',
@@ -24,9 +24,20 @@ const MENU_OPTIONS = [
   'Exit',
 ] as const;
 
+const MENU_OPTIONS = [
+  'List all skills',
+  'List project skills',
+  'List global skills',
+  'Filter by agent',
+  'Search skills',
+  'Install skill',
+  'Exit',
+] as const;
+
 const SKILL_ACTIONS = ['Update skill', 'Remove skill', 'Move skill', 'Back', 'Exit'] as const;
 
-type MenuOption = (typeof MENU_OPTIONS)[number];
+type CommandOption = (typeof COMMAND_OPTIONS)[number];
+type MenuOption = (typeof COMMAND_OPTIONS)[number];
 type SkillAction = (typeof SKILL_ACTIONS)[number];
 
 export interface CuiCliOptions {
@@ -70,46 +81,120 @@ Examples:
 `);
 }
 
+function color(text: string, ...codes: string[]): string {
+  if (!process.stdout.isTTY || process.env.NO_COLOR) return text;
+  return `${codes.join('')}${text}${style.reset}`;
+}
+
+function center(text: string, width = 72): string {
+  const padding = Math.max(0, Math.floor((width - text.length) / 2));
+  return `${' '.repeat(padding)}${text}`;
+}
+
 function printWindow(title: string, instructions: string[], content: string[] = []): void {
-  const box = new Box({ title, borderStyle: 'round' });
+  const box = new Box({ title: title.toUpperCase(), borderStyle: 'round' });
   const body = [
-    'Skills command center',
-    'Discover, install, update, move, and remove agent skills from one guided terminal UI.',
-    'Explore more skills at https://www.skills.sh/',
+    color(center('SKILLS COMMAND CENTER'), fg.cyan, style.bold),
+    color(
+      'Discover, install, update, move, and remove agent skills from one guided terminal UI.',
+      fg.gray
+    ),
+    color('Explore more skills at https://www.skills.sh/', fg.blue),
     '',
-    'Keys: ↑/↓ or j/k to move • Enter to select • Ctrl+C to cancel • choose Exit to quit',
-    '',
-    ...instructions.map((line) => `• ${line}`),
+    ...instructions,
     ...(content.length > 0 ? ['', ...content] : []),
   ].join('\n');
   console.log(box.render(body));
 }
 
+class CuiPromptCancel extends Error {
+  constructor() {
+    super('Cancelled');
+    this.name = 'CuiPromptCancel';
+  }
+}
+
+function isCancelError(error: unknown): boolean {
+  return (
+    error instanceof CuiPromptCancel || (error instanceof Error && error.message === 'Cancelled')
+  );
+}
+
+async function withEscCancel<T>(prompt: Promise<T>): Promise<T> {
+  const stdin = process.stdin;
+  let active = true;
+  return new Promise<T>((resolve, reject) => {
+    const onEsc = (key: Buffer | string) => {
+      if (String(key) !== '\x1b') return;
+      active = false;
+      stdin.removeListener('data', onEsc);
+      stdin.emit('data', '\x03');
+      reject(new CuiPromptCancel());
+    };
+    setImmediate(() => {
+      if (active) stdin.on('data', onEsc);
+    });
+    prompt.then(
+      (value) => {
+        active = false;
+        stdin.removeListener('data', onEsc);
+        resolve(value);
+      },
+      (error) => {
+        active = false;
+        stdin.removeListener('data', onEsc);
+        reject(error);
+      }
+    );
+  });
+}
+
+async function selectPrompt<T>(config: Parameters<typeof select<T>>[0]): Promise<T> {
+  return withEscCancel(select<T>(config));
+}
+
+async function inputPrompt(config: Parameters<typeof input>[0]): Promise<string> {
+  return withEscCancel(input(config));
+}
+
+async function confirmPrompt(config: Parameters<typeof confirm>[0]): Promise<boolean> {
+  return withEscCancel(confirm(config));
+}
+
 function parseMenuSelection(args: string[]): { selection?: MenuOption; values: string[] } {
   for (let size = Math.min(3, args.length); size >= 1; size--) {
     const candidate = args.slice(0, size).join(' ');
-    if (MENU_OPTIONS.includes(candidate as MenuOption)) {
+    if (COMMAND_OPTIONS.includes(candidate as CommandOption)) {
       return { selection: candidate as MenuOption, values: args.slice(size) };
     }
   }
   return { values: args };
 }
 
-async function promptMenu(): Promise<MenuOption> {
-  printWindow('Main menu', [
-    'Choose a command, then continue to the next relevant options.',
-    'Use Update skill here for the guided equivalent of `npx skills update`.',
-    'Exit is always available.',
-  ]);
-  return select<MenuOption>({
-    message: 'Command:',
-    options: MENU_OPTIONS.map((option) => ({ label: option, value: option })),
-  });
+async function promptMenu(status?: string): Promise<MenuOption | 'cancel'> {
+  printWindow(
+    'Main menu',
+    [
+      'Choose a command, then continue to the next relevant options.',
+      'Skill-specific update, remove, and move actions are available after selecting a listed skill.',
+      'Press Esc or choose Exit to quit.',
+    ],
+    status ? [color(`Status: ${status}`, fg.green)] : []
+  );
+  try {
+    return await selectPrompt<MenuOption>({
+      message: 'Command:',
+      options: MENU_OPTIONS.map((option) => ({ label: option, value: option })),
+    });
+  } catch (error) {
+    if (isCancelError(error)) return 'cancel';
+    throw error;
+  }
 }
 
 async function readField(args: string[], index: number, message: string): Promise<string> {
   if (args[index] !== undefined) return args[index]!;
-  return input({ message });
+  return inputPrompt({ message });
 }
 
 async function confirmAction(
@@ -121,7 +206,7 @@ async function confirmAction(
 ): Promise<boolean> {
   if (options.skipConfirmation) return true;
   if (args[index] !== undefined) return args[index] === word;
-  return confirm({ message, defaultValue: false });
+  return confirmPrompt({ message, defaultValue: false });
 }
 
 function parseLayer(value: string, fallback: SkillLayer = 'project'): SkillLayer {
@@ -180,10 +265,12 @@ async function installFromSource(
   values: string[],
   source: string,
   skills?: string[]
-): Promise<void> {
+): Promise<string> {
   const { layer, agents } = await promptInstallOptions(actions, values, source);
   const result = await actions.install({ source, layer, agents, skills });
-  console.log(result.message ?? `Installed from ${source}.`);
+  const message = result.message ?? `Installed from ${source}.`;
+  console.log(message);
+  return message;
 }
 
 async function showSearchFlow(
@@ -202,7 +289,7 @@ async function showSearchFlow(
   );
   if (!interactive || results.length === 0) return 'continue';
 
-  const selected = await select<string>({
+  const selected = await selectPrompt<string>({
     message: 'Search result:',
     options: [
       ...results.map((result, index) => ({
@@ -223,43 +310,50 @@ async function showSearchFlow(
   return 'continue';
 }
 
-async function updateSkill(actions: CuiActions, skill: CuiInstalledSkill): Promise<void> {
+async function updateSkill(actions: CuiActions, skill: CuiInstalledSkill): Promise<string> {
   const result = await actions.update({ names: [skill.name], layer: skill.layer });
-  console.log(result.message ?? 'Update complete.');
+  const message = result.message ?? 'Update complete.';
+  console.log(message);
+  return message;
 }
 
 async function removeSkill(
   actions: CuiActions,
   options: CuiCliOptions,
   skill: CuiInstalledSkill
-): Promise<void> {
+): Promise<string> {
   const ok = options.skipConfirmation
     ? true
-    : await confirm({ message: `Remove ${skill.name} from ${skill.layer}?`, defaultValue: false });
+    : await confirmPrompt({
+        message: `Remove ${skill.name} from ${skill.layer}?`,
+        defaultValue: false,
+      });
   if (!ok) {
     console.log('Remove cancelled.');
-    return;
+    return 'Remove cancelled.';
   }
   const result = await actions.remove({
     names: [skill.name],
     layer: skill.layer,
     skipConfirmation: true,
   });
-  console.log(result.message ?? 'Remove complete.');
+  const message = result.message ?? 'Remove complete.';
+  console.log(message);
+  return message;
 }
 
 async function moveSkill(
   actions: CuiActions,
   options: CuiCliOptions,
   skill: CuiInstalledSkill
-): Promise<void> {
+): Promise<string> {
   const toLayer = oppositeLayer(skill.layer);
   const ok = options.skipConfirmation
     ? true
-    : await confirm({ message: `Move ${skill.name} to ${toLayer}?`, defaultValue: false });
+    : await confirmPrompt({ message: `Move ${skill.name} to ${toLayer}?`, defaultValue: false });
   if (!ok) {
     console.log('Move cancelled.');
-    return;
+    return 'Move cancelled.';
   }
   const result = await actions.move({
     name: skill.name,
@@ -267,25 +361,27 @@ async function moveSkill(
     toLayer,
     skipConfirmation: true,
   });
-  console.log(result.message ?? 'Move complete.');
+  const message = result.message ?? 'Move complete.';
+  console.log(message);
+  return message;
 }
 
 async function promptSkillAction(
   actions: CuiActions,
   options: CuiCliOptions,
   skill: CuiInstalledSkill
-): Promise<'back' | 'exit'> {
+): Promise<'back' | 'exit' | { status: string }> {
   printWindow('Skill actions', [`Selected: ${skill.name}`, `Layer: ${skill.layer}`]);
-  const action = await select<SkillAction>({
+  const action = await selectPrompt<SkillAction>({
     message: 'Next action:',
     options: SKILL_ACTIONS.map((item) => ({ label: item, value: item })),
   });
 
   if (action === 'Exit') return 'exit';
   if (action === 'Back') return 'back';
-  if (action === 'Update skill') await updateSkill(actions, skill);
-  if (action === 'Remove skill') await removeSkill(actions, options, skill);
-  if (action === 'Move skill') await moveSkill(actions, options, skill);
+  if (action === 'Update skill') return { status: await updateSkill(actions, skill) };
+  if (action === 'Remove skill') return { status: await removeSkill(actions, options, skill) };
+  if (action === 'Move skill') return { status: await moveSkill(actions, options, skill) };
   return 'back';
 }
 
@@ -294,7 +390,7 @@ async function showListFlow(
   options: CuiCliOptions,
   context: ListContext,
   interactive: boolean
-): Promise<'continue' | 'exit'> {
+): Promise<'continue' | 'exit' | { status: string }> {
   const skills = await actions.list({ layer: context.layer, agents: context.agents });
   printWindow(
     context.title,
@@ -305,7 +401,7 @@ async function showListFlow(
   if (!interactive) return 'continue';
   if (skills.length === 0) return 'continue';
 
-  const selected = await select<string>({
+  const selected = await selectPrompt<string>({
     message: 'Skill:',
     options: [
       ...skills.map((skill) => ({
@@ -322,7 +418,10 @@ async function showListFlow(
   if (selected === '__back') return 'continue';
   const skill = skills.find((item) => item.name === selected);
   if (!skill) return 'continue';
-  return (await promptSkillAction(actions, options, skill)) === 'exit' ? 'exit' : 'continue';
+  const actionResult = await promptSkillAction(actions, options, skill);
+  if (actionResult === 'exit') return 'exit';
+  if (typeof actionResult === 'object') return actionResult;
+  return 'continue';
 }
 
 async function runSingleCommand(
@@ -408,9 +507,10 @@ export async function runCui(args: string[] = []): Promise<void> {
     return;
   }
 
+  let lastStatus: string | undefined;
   while (true) {
-    const selection = await promptMenu();
-    if (selection === 'Exit') {
+    const selection = await promptMenu(lastStatus);
+    if (selection === 'cancel' || selection === 'Exit') {
       console.log('Goodbye.');
       return;
     }
@@ -423,7 +523,7 @@ export async function runCui(args: string[] = []): Promise<void> {
         return showListFlow(actions, options, { layer: 'global', title: 'Global skills' }, true);
       if (selection === 'Filter by agent') {
         const agent = (
-          await input({ message: 'Agent id (for example: claude-code, codex, cursor):' })
+          await inputPrompt({ message: 'Agent id (for example: claude-code, codex, cursor):' })
         ).trim();
         return showListFlow(
           actions,
@@ -435,14 +535,21 @@ export async function runCui(args: string[] = []): Promise<void> {
       if (selection === 'Search skills') return showSearchFlow(actions, [], true);
       if (selection === 'Install skill') {
         const source = (
-          await input({ message: 'Folder, GitHub shorthand, git URL, or full URL:' })
+          await inputPrompt({ message: 'Folder, GitHub shorthand, git URL, or full URL:' })
         ).trim();
-        await installFromSource(actions, [], source);
+        lastStatus = await installFromSource(actions, [], source);
         return 'continue' as const;
       }
       await runSingleCommand(actions, options, selection, []);
       return 'continue' as const;
-    })();
+    })().catch((error) => {
+      if (isCancelError(error)) {
+        lastStatus = 'Command cancelled.';
+        return 'continue' as const;
+      }
+      throw error;
+    });
     if (result === 'exit') return;
+    if (typeof result === 'object') lastStatus = result.status;
   }
 }
