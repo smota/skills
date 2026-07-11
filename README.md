@@ -127,6 +127,13 @@ npx skills cui --no-confirmation
 
 Use the CUI to list project/global skills, filter by agent, search, install, update, remove, and move skills between project and global layers. Destructive actions ask for confirmation by default; `--no-confirmation` skips CUI confirmation prompts for scripted or trusted workflows.
 
+Key CUI capabilities:
+
+- Select a skill to review its description, activation hints when available, install layer, linked agents, path, and source/ref/hash metadata before acting.
+- Press <kbd>Space</kbd> in a skill list to mark multiple skills, then update, remove, or move the selected group in one flow.
+- Use <kbd>Esc</kbd> to cancel guided inputs or exit from the root menu.
+- Navigate long lists with stable terminal redraws; CUI prompts and headers are implemented with project-owned terminal primitives instead of an external TUI runtime dependency.
+
 The CUI runs inside the core `skills` CLI and uses the same internal code paths as the command-line commands where available.
 
 ### Standalone `skill-cui`
@@ -137,7 +144,7 @@ If you want only the guided UI without installing this package first, run:
 npx skill-cui
 ```
 
-`skill-cui` is a standalone wrapper that invokes the public `npx skills` command and parses structured output where available. It intentionally does not import private `skills` internals. The standalone package is published from the `smota/skills` fork with attribution to the upstream `vercel-labs/skills` project. Standalone search currently requires keywords; for open interactive search, run `npx skills find` directly.
+`skill-cui` is a standalone wrapper that invokes the public `npx skills` command and parses structured output where available. It intentionally does not import private `skills` internals and ships its own small terminal UI helpers rather than depending on an external TUI runtime package. The standalone package is published from the `smota/skills` fork with attribution to the upstream `vercel-labs/skills` project. Standalone search currently requires keywords; for open interactive search, run `npx skills find` directly.
 
 ### `skills list`
 

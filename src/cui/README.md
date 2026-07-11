@@ -1,6 +1,6 @@
 # CUI architecture
 
-This directory contains the shared command-line user-interface domain for the future `skills cui` and `skill-cui` entry points.
+This directory contains the shared command-line user-interface domain for the `skills cui` and `skill-cui` entry points.
 
 ## Backend contract
 
@@ -17,6 +17,26 @@ The contract covers:
 - optional local agent detection.
 
 `actions.ts` contains small validation and normalization helpers around that backend. These helpers are intentionally UI-library-agnostic so they can be tested without terminal interaction.
+
+## Terminal UI primitives
+
+The core CUI uses project-owned terminal helpers instead of a runtime TUI dependency:
+
+- `terminal-ui.ts` renders bounded boxes, colors, input prompts, and confirmation prompts.
+- `select-prompt.ts` renders single-select and multi-select lists with physical-row clearing so long or wrapped rows do not leave stale terminal output.
+
+Keep these helpers small and deterministic. Prefer exposing pure formatting/window helpers for tests rather than trying to automate raw TTY interaction.
+
+## User-facing capabilities
+
+The guided CUI supports:
+
+- root navigation for list, filter, search, install, and exit;
+- selected-skill detail screens with description, activation hints when available, layer, agents, path, source/ref/hash/plugin metadata, and clean fallbacks;
+- <kbd>Space</kbd> to mark multiple skills in a list;
+- bulk update/remove/move for selected skills with destructive confirmations;
+- <kbd>Esc</kbd> cancellation for guided prompts and root-menu exit;
+- bounded header/list rendering for narrow terminals and long skill names.
 
 ## Planned implementations
 
@@ -35,6 +55,8 @@ The core backend should call existing repository modules directly where possible
 
 The standalone backend must not import private core internals. It should invoke the public `npx skills` command with explicit arguments and parse structured output where available. Today `skills list --json` is the primary structured command; if search, update, or remove need structured output for reliable standalone behavior, add that support deliberately in the relevant feature issue instead of parsing fragile terminal text.
 
+Standalone `skill-cui` ships package-local terminal helpers under `packages/skill-cui/lib/` so the npm package remains self-contained without importing `src/` internals or depending on an external TUI runtime.
+
 ## Manual validation scenarios
 
 ```bash
@@ -52,7 +74,7 @@ node packages/skill-cui/bin/skill-cui.mjs "List project skills"
 Before opening a PR, run the focused CUI checks plus the repository validation commands:
 
 ```bash
-pnpm test src/cui/actions.test.ts src/cui/cli.test.ts src/cui/list-view.test.ts src/cli.test.ts tests/skill-cui-package.test.ts
+pnpm test src/cui/terminal-ui.test.ts src/cui/select-prompt.test.ts src/cui/actions.test.ts src/cui/cli.test.ts src/cui/list-view.test.ts src/cli.test.ts tests/skill-cui-package.test.ts
 pnpm test
 pnpm build
 ```
