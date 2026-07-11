@@ -21,13 +21,26 @@ function visibleLength(text) {
   return stripVTControlCharacters(text).length;
 }
 
+function truncateVisible(value, maxWidth) {
+  if (visibleLength(value) <= maxWidth) return value;
+  const plain = stripVTControlCharacters(value);
+  if (maxWidth <= 1) return plain.slice(0, Math.max(0, maxWidth));
+  return `${plain.slice(0, maxWidth - 1)}…`;
+}
+
 export function renderBox(title, body) {
+  const terminalColumns = process.stdout.columns && process.stdout.columns > 0 ? process.stdout.columns : 80;
+  const maxWidth = Math.max(20, terminalColumns - 2);
   const lines = body.split('\n');
-  const titleText = ` ${title} `;
-  const width = Math.max(titleText.length, ...lines.map(visibleLength), 20);
+  const titleText = ` ${truncateVisible(title, Math.max(1, maxWidth - 2))} `;
+  const desiredWidth = Math.max(titleText.length, ...lines.map(visibleLength), 20);
+  const width = Math.min(maxWidth, desiredWidth);
   const top = `╭${titleText}${'─'.repeat(Math.max(0, width - titleText.length))}╮`;
   const bottom = `╰${'─'.repeat(width)}╯`;
-  const content = lines.map((line) => `│${line}${' '.repeat(Math.max(0, width - visibleLength(line)))}│`);
+  const content = lines.map((line) => {
+    const rendered = truncateVisible(line, width);
+    return `│${rendered}${' '.repeat(Math.max(0, width - visibleLength(rendered)))}│`;
+  });
   return [top, ...content, bottom].join('\n');
 }
 

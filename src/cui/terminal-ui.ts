@@ -23,20 +23,36 @@ export function color(text: string, formatter: (value: string) => string): strin
 }
 
 export function renderBox(title: string, body: string): string {
+  const terminalColumns =
+    process.stdout.columns && process.stdout.columns > 0 ? process.stdout.columns : 80;
+  const maxWidth = Math.max(20, terminalColumns - 2);
   const lines = body.split('\n');
-  const titleText = ` ${title} `;
-  const width = Math.max(titleText.length, ...lines.map((line) => stripAnsi(line).length), 20);
+  const titleText = ` ${truncateVisible(title, Math.max(1, maxWidth - 2))} `;
+  const desiredWidth = Math.max(titleText.length, ...lines.map((line) => visibleLength(line)), 20);
+  const width = Math.min(maxWidth, desiredWidth);
   const top = `╭${titleText}${'─'.repeat(Math.max(0, width - titleText.length))}╮`;
   const bottom = `╰${'─'.repeat(width)}╯`;
   const content = lines.map((line) => {
-    const padding = Math.max(0, width - stripAnsi(line).length);
-    return `│${line}${' '.repeat(padding)}│`;
+    const rendered = truncateVisible(line, width);
+    const padding = Math.max(0, width - visibleLength(rendered));
+    return `│${rendered}${' '.repeat(padding)}│`;
   });
   return [top, ...content, bottom].join('\n');
 }
 
 function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function visibleLength(value: string): number {
+  return stripAnsi(value).length;
+}
+
+function truncateVisible(value: string, maxWidth: number): string {
+  if (visibleLength(value) <= maxWidth) return value;
+  const plain = stripAnsi(value);
+  if (maxWidth <= 1) return plain.slice(0, Math.max(0, maxWidth));
+  return `${plain.slice(0, maxWidth - 1)}…`;
 }
 
 interface InputConfig {
