@@ -1,6 +1,6 @@
 {
   "name": "skill-cui",
-  "version": "0.0.0",
+  "version": "1.5.16",
   "description": "Standalone CUI for the skills CLI",
   "type": "module",
   "bin": {

@@ -85,7 +85,7 @@ async function promptMenu() {
 
 async function runSkills(args) {
   try {
-    return await execFileAsync('npx', ['skills', ...args], {
+    return await execFileAsync('npx', ['-y', 'skills', ...args], {
       encoding: 'utf8',
       windowsHide: true,
       maxBuffer: 1024 * 1024 * 10,
@@ -132,6 +132,7 @@ async function moveSkill(name, fromLayer, skipConfirmation) {
   const toLayer = fromLayer === 'project' ? 'global' : 'project';
   const addArgs = ['add', skill.path, '--yes'];
   if (toLayer === 'global') addArgs.push('--global');
+  for (const agent of skill.agentIds ?? []) addArgs.push('--agent', agent);
   await runSkills(addArgs);
   await removeSkill(name, fromLayer, skipConfirmation);
   return toLayer;

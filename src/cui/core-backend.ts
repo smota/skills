@@ -1,4 +1,4 @@
-import { runAdd } from '../add.ts';
+import { parseAddOptions, runAdd } from '../add.ts';
 import { agents } from '../agents.ts';
 import { searchSkillsAPI } from '../find.ts';
 import { listInstalledSkills } from '../installer.ts';
@@ -67,7 +67,12 @@ export class CoreCuiBackend implements CuiBackend {
     for (const skill of request.skills ?? []) args.push('--skill', skill);
     args.push('--yes');
 
-    await runAdd(args);
+    const { source, options, errors } = parseAddOptions(args);
+    if (errors.length > 0) {
+      return { ok: false, message: errors.join('\n') };
+    }
+
+    await runAdd(source, options);
     return { ok: true };
   }
 

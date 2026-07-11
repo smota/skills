@@ -98,6 +98,7 @@ export async function runList(args: string[]): Promise<void> {
       path: skill.canonicalPath,
       scope: skill.scope,
       agents: skill.agents.map((a) => agents[a].displayName),
+      agentIds: skill.agents,
     }));
     console.log(JSON.stringify(jsonOutput, null, 2));
     return;

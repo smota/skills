@@ -55,6 +55,12 @@ importers:
         specifier: ^5.1.0
         version: 5.1.0
 
+  packages/skill-cui:
+    dependencies:
+      '@vr_patel/tui':
+        specifier: ^1.0.0
+        version: 1.0.0
+
 packages:
 
   '@babel/generator@8.0.0':

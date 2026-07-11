@@ -118,6 +118,7 @@ description: A skill for JSON testing
       expect(parsed[0].path).toContain('json-skill');
       expect(parsed[0].scope).toBe('project');
       expect(Array.isArray(parsed[0].agents)).toBe(true);
+      expect(Array.isArray(parsed[0].agentIds)).toBe(true);
       // No ANSI codes in JSON output
       expect(result.stdout).not.toMatch(/\x1b\[/);
     });

@@ -9,6 +9,7 @@ describe('skill-cui package', () => {
     const pkg = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf-8'));
 
     expect(pkg.name).toBe('skill-cui');
+    expect(pkg.version).not.toBe('0.0.0');
     expect(pkg.bin).toEqual({ 'skill-cui': './bin/skill-cui.mjs' });
     expect(pkg.dependencies).toEqual({ '@vr_patel/tui': '^1.0.0' });
   });
