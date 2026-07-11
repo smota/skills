@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
+import type { AgentType } from '../types.ts';
 import { CuiActions } from './actions.ts';
 import { CoreCuiBackend } from './core-backend.ts';
+import { formatInstalledSkills } from './list-view.ts';
 
 type CuiFrame = {
   title: string;
@@ -72,22 +74,50 @@ export async function runCui(args: string[] = []): Promise<void> {
   cui.args = rest;
   cui.results = [];
 
-  return new Promise((resolve, reject) => {
+  function printLines(lines: string[]): void {
+    for (const line of lines) cui.print(line);
+  }
+
+  return new Promise((resolve) => {
     cui.push({
       title: 'skills CUI',
       type: 'buttons',
-      data: ['List project skills', 'List global skills', 'Search skills', 'Install skill', 'Exit'],
+      data: [
+        'List all skills',
+        'List project skills',
+        'List global skills',
+        'Filter by agent',
+        'Search skills',
+        'Install skill',
+        'Exit',
+      ],
     });
 
     cui.push(async (cb) => {
       try {
         const selection = cui.last(1);
-        if (selection === 'List project skills') {
-          const skills = await actions.list({ layer: 'project' });
-          cui.print(`Found ${skills.length} project skill(s).`);
+        if (selection === 'List all skills') {
+          printLines(formatInstalledSkills(await actions.list({ layer: 'all' })));
+        } else if (selection === 'List project skills') {
+          printLines(formatInstalledSkills(await actions.list({ layer: 'project' }), ['project']));
         } else if (selection === 'List global skills') {
-          const skills = await actions.list({ layer: 'global' });
-          cui.print(`Found ${skills.length} global skill(s).`);
+          printLines(formatInstalledSkills(await actions.list({ layer: 'global' }), ['global']));
+        } else if (selection === 'Filter by agent') {
+          cui.splice({
+            title: 'Filter installed skills by agent',
+            type: 'fields',
+            data: 'Agent id (for example: claude-code, codex, cursor): ',
+          });
+          cui.splice(async (next) => {
+            try {
+              const agent = String(cui.last(1) ?? '').trim();
+              const skills = await actions.list({ layer: 'all', agents: [agent as AgentType] });
+              printLines(formatInstalledSkills(skills));
+              next();
+            } catch (error) {
+              next(error instanceof Error ? error : new Error(String(error)));
+            }
+          });
         } else if (selection === 'Search skills') {
           cui.print('Search flow will be implemented in the CUI search/install feature.');
         } else if (selection === 'Install skill') {

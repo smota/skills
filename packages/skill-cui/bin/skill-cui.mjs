@@ -54,11 +54,36 @@ async function runSkills(args) {
   }
 }
 
-async function listSkills(layer) {
+async function listSkills(layer, agent) {
   const args = ['list', '--json'];
   if (layer === 'global') args.push('--global');
+  if (agent) args.push('--agent', agent);
   const { stdout } = await runSkills(args);
-  return JSON.parse(stdout || '[]');
+  const parsed = JSON.parse(stdout || '[]');
+  return parsed.map((skill) => ({ ...skill, layer }));
+}
+
+function formatSkills(skills, layers = ['project', 'global']) {
+  const lines = [];
+  for (const layer of layers) {
+    const layerSkills = skills.filter((skill) => skill.layer === layer);
+    const label = layer === 'project' ? 'Project' : 'Global';
+    lines.push(`${label} skills (${layerSkills.length})`);
+    if (layerSkills.length === 0) {
+      lines.push(`  No ${layer} skills found.`);
+      continue;
+    }
+    for (const skill of layerSkills.sort((a, b) => a.name.localeCompare(b.name))) {
+      const agents = skill.agents?.length ? skill.agents.join(', ') : 'not linked';
+      const path = skill.path ? ` — ${skill.path}` : '';
+      lines.push(`  - ${skill.name} [${agents}]${path}`);
+    }
+  }
+  return lines;
+}
+
+function printLines(cui, lines) {
+  for (const line of lines) cui.print(line);
 }
 
 async function main() {
@@ -73,26 +98,58 @@ async function main() {
   cui.args = rest;
   cui.results = [];
 
-  await new Promise((resolve, reject) => {
+  await new Promise((resolve) => {
     cui.push({
       title: 'skill-cui',
       type: 'buttons',
-      data: ['List project skills', 'List global skills', 'Search skills', 'Install skill', 'Exit'],
+      data: [
+        'List all skills',
+        'List project skills',
+        'List global skills',
+        'Filter by agent',
+        'Search skills',
+        'Install skill',
+        'Exit',
+      ],
     });
 
     cui.push(async (cb) => {
       try {
         const selection = cui.last(1);
-        if (selection === 'List project skills') {
-          const skills = await listSkills('project');
-          cui.print(`Found ${skills.length} project skill(s).`);
+        if (selection === 'List all skills') {
+          const skills = [...(await listSkills('project')), ...(await listSkills('global'))];
+          printLines(cui, formatSkills(skills));
+        } else if (selection === 'List project skills') {
+          printLines(cui, formatSkills(await listSkills('project'), ['project']));
         } else if (selection === 'List global skills') {
-          const skills = await listSkills('global');
-          cui.print(`Found ${skills.length} global skill(s).`);
+          printLines(cui, formatSkills(await listSkills('global'), ['global']));
+        } else if (selection === 'Filter by agent') {
+          cui.splice({
+            title: 'Filter installed skills by agent',
+            type: 'fields',
+            data: 'Agent id (for example: claude-code, codex, cursor): ',
+          });
+          cui.splice(async (next) => {
+            try {
+              const agent = String(cui.last(1) ?? '').trim();
+              const skills = [
+                ...(await listSkills('project', agent)),
+                ...(await listSkills('global', agent)),
+              ];
+              printLines(cui, formatSkills(skills));
+              next();
+            } catch (error) {
+              next(error instanceof Error ? error : new Error(String(error)));
+            }
+          });
         } else if (selection === 'Search skills') {
-          cui.print('Search flow will be implemented in the standalone CUI search/install feature.');
+          cui.print(
+            'Search flow will be implemented in the standalone CUI search/install feature.'
+          );
         } else if (selection === 'Install skill') {
-          cui.print('Install flow will be implemented in the standalone CUI search/install feature.');
+          cui.print(
+            'Install flow will be implemented in the standalone CUI search/install feature.'
+          );
         } else {
           cui.print('Goodbye.');
         }
