@@ -15,7 +15,19 @@ export interface CuiInstalledSkill {
   layer: SkillLayer;
   agents: AgentType[];
   path?: string;
+  description?: string;
   source?: string;
+  sourceUrl?: string;
+  sourceType?: string;
+  ref?: string;
+  skillPath?: string;
+  hash?: string;
+  hashKind?: 'skillFolderHash' | 'computedHash';
+  pluginName?: string;
+  installedAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+  triggers?: string[];
 }
 
 export interface CuiSearchResult {

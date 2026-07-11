@@ -1,8 +1,9 @@
-import { Box, confirm, fg, input, select, style } from '@vr_patel/tui';
+import { Box, confirm, fg, input, style } from '@vr_patel/tui';
 import type { AgentType } from '../types.ts';
 import { CuiActions } from './actions.ts';
 import { CoreCuiBackend } from './core-backend.ts';
-import { formatInstalledSkills } from './list-view.ts';
+import { formatInstalledSkills, formatSkillDetails } from './list-view.ts';
+import { cuiMultiSelectPrompt, cuiSelectPrompt } from './select-prompt.ts';
 import type {
   CuiAgentOption,
   CuiInstalledSkill,
@@ -35,10 +36,19 @@ const MENU_OPTIONS = [
 ] as const;
 
 const SKILL_ACTIONS = ['Update skill', 'Remove skill', 'Move skill', 'Back', 'Exit'] as const;
+const BULK_SKILL_ACTIONS = [
+  'Update selected',
+  'Remove selected',
+  'Move selected',
+  'Clear selection',
+  'Back',
+  'Exit',
+] as const;
 
 type CommandOption = (typeof COMMAND_OPTIONS)[number];
 type MenuOption = (typeof COMMAND_OPTIONS)[number];
 type SkillAction = (typeof SKILL_ACTIONS)[number];
+type BulkSkillAction = (typeof BULK_SKILL_ACTIONS)[number];
 
 export interface CuiCliOptions {
   skipConfirmation: boolean;
@@ -149,8 +159,8 @@ async function withEscCancel<T>(prompt: Promise<T>): Promise<T> {
   });
 }
 
-async function selectPrompt<T>(config: Parameters<typeof select<T>>[0]): Promise<T> {
-  return withEscCancel(select<T>(config));
+async function selectPrompt<T>(config: Parameters<typeof cuiSelectPrompt<T>>[0]): Promise<T> {
+  return cuiSelectPrompt<T>(config);
 }
 
 async function inputPrompt(config: Parameters<typeof input>[0]): Promise<string> {
@@ -361,9 +371,160 @@ async function moveSkill(
     toLayer,
     skipConfirmation: true,
   });
-  const message = result.message ?? 'Move complete.';
+  const message = result.message ?? (result.ok ? 'Move complete.' : 'Move failed.');
   console.log(message);
   return message;
+}
+
+function plural(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+function groupSkillsByLayer(skills: CuiInstalledSkill[]): Map<SkillLayer, CuiInstalledSkill[]> {
+  const groups = new Map<SkillLayer, CuiInstalledSkill[]>();
+  for (const skill of skills) {
+    groups.set(skill.layer, [...(groups.get(skill.layer) ?? []), skill]);
+  }
+  return groups;
+}
+
+async function updateSelectedSkills(
+  actions: CuiActions,
+  skills: CuiInstalledSkill[]
+): Promise<string> {
+  for (const [layer, layerSkills] of groupSkillsByLayer(skills)) {
+    await actions.update({
+      names: layerSkills.map((skill) => skill.name),
+      layer,
+    });
+  }
+  const message = `Updated ${plural(skills.length, 'selected skill')}.`;
+  console.log(message);
+  return message;
+}
+
+async function removeSelectedSkills(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  skills: CuiInstalledSkill[]
+): Promise<string> {
+  const ok = options.skipConfirmation
+    ? true
+    : await confirmPrompt({
+        message: `Remove ${plural(skills.length, 'selected skill')}?`,
+        defaultValue: false,
+      });
+  if (!ok) {
+    console.log('Remove selected cancelled.');
+    return 'Remove selected cancelled.';
+  }
+
+  for (const [layer, layerSkills] of groupSkillsByLayer(skills)) {
+    await actions.remove({
+      names: layerSkills.map((skill) => skill.name),
+      layer,
+      skipConfirmation: true,
+    });
+  }
+  const message = `Removed ${plural(skills.length, 'selected skill')}.`;
+  console.log(message);
+  return message;
+}
+
+function formatMoveSummary(skills: CuiInstalledSkill[]): string {
+  const groups = groupSkillsByLayer(skills);
+  const parts: string[] = [];
+  const projectCount = groups.get('project')?.length ?? 0;
+  const globalCount = groups.get('global')?.length ?? 0;
+  if (projectCount > 0) parts.push(`${plural(projectCount, 'project skill')} to global`);
+  if (globalCount > 0) parts.push(`${plural(globalCount, 'global skill')} to project`);
+  return parts.join(' and ');
+}
+
+function findBulkMoveConflicts(
+  selectedSkills: CuiInstalledSkill[],
+  allSkills: CuiInstalledSkill[]
+): string[] {
+  return selectedSkills
+    .filter((skill) =>
+      allSkills.some(
+        (candidate) =>
+          candidate.name === skill.name && candidate.layer === oppositeLayer(skill.layer)
+      )
+    )
+    .map((skill) => `${skill.name} already exists in ${oppositeLayer(skill.layer)}`);
+}
+
+async function moveSelectedSkills(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  skills: CuiInstalledSkill[],
+  allSkills: CuiInstalledSkill[]
+): Promise<string> {
+  const conflicts = findBulkMoveConflicts(skills, allSkills);
+  if (conflicts.length > 0) {
+    const message = `Move selected blocked: ${conflicts.join('; ')}.`;
+    console.log(message);
+    return message;
+  }
+
+  const ok = options.skipConfirmation
+    ? true
+    : await confirmPrompt({
+        message: `Move ${formatMoveSummary(skills)}?`,
+        defaultValue: false,
+      });
+  if (!ok) {
+    console.log('Move selected cancelled.');
+    return 'Move selected cancelled.';
+  }
+
+  const failures: string[] = [];
+  for (const skill of skills) {
+    const result = await actions.move({
+      name: skill.name,
+      fromLayer: skill.layer,
+      toLayer: oppositeLayer(skill.layer),
+      skipConfirmation: true,
+    });
+    if (!result.ok) failures.push(result.message ?? `${skill.name} failed`);
+  }
+
+  const moved = skills.length - failures.length;
+  const message =
+    failures.length === 0
+      ? `Moved ${plural(skills.length, 'selected skill')}.`
+      : `Moved ${plural(moved, 'selected skill')}; ${failures.length} failed: ${failures.join('; ')}`;
+  console.log(message);
+  return message;
+}
+
+async function promptBulkSkillAction(
+  actions: CuiActions,
+  options: CuiCliOptions,
+  skills: CuiInstalledSkill[],
+  allSkills: CuiInstalledSkill[]
+): Promise<'back' | 'clear' | 'exit' | { status: string }> {
+  printWindow(
+    'Bulk skill actions',
+    [`Selected: ${plural(skills.length, 'skill')}`, 'Choose an action for all marked skills.'],
+    skills.slice(0, 8).map((skill) => `- ${skill.name} (${skill.layer})`)
+  );
+  const action = await selectPrompt<BulkSkillAction>({
+    message: 'Bulk action:',
+    options: BULK_SKILL_ACTIONS.map((item) => ({ label: item, value: item })),
+  });
+
+  if (action === 'Exit') return 'exit';
+  if (action === 'Back') return 'back';
+  if (action === 'Clear selection') return 'clear';
+  if (action === 'Update selected') return { status: await updateSelectedSkills(actions, skills) };
+  if (action === 'Remove selected') {
+    return { status: await removeSelectedSkills(actions, options, skills) };
+  }
+  if (action === 'Move selected')
+    return { status: await moveSelectedSkills(actions, options, skills, allSkills) };
+  return 'back';
 }
 
 async function promptSkillAction(
@@ -371,7 +532,11 @@ async function promptSkillAction(
   options: CuiCliOptions,
   skill: CuiInstalledSkill
 ): Promise<'back' | 'exit' | { status: string }> {
-  printWindow('Skill actions', [`Selected: ${skill.name}`, `Layer: ${skill.layer}`]);
+  printWindow(
+    'Skill actions',
+    ['Review skill details, then choose an action.'],
+    formatSkillDetails(skill)
+  );
   const action = await selectPrompt<SkillAction>({
     message: 'Next action:',
     options: SKILL_ACTIONS.map((item) => ({ label: item, value: item })),
@@ -394,34 +559,54 @@ async function showListFlow(
   const skills = await actions.list({ layer: context.layer, agents: context.agents });
   printWindow(
     context.title,
-    ['Review installed skills.', 'Select one skill for update/remove/move, or exit.'],
+    [
+      'Review installed skills.',
+      'Press Space to mark skills for bulk actions, or Enter with no marks for one skill.',
+    ],
     formatInstalledSkills(skills)
   );
 
   if (!interactive) return 'continue';
   if (skills.length === 0) return 'continue';
 
-  const selected = await selectPrompt<string>({
-    message: 'Skill:',
-    options: [
-      ...skills.map((skill) => ({
-        label: skill.name,
-        value: skill.name,
-        description: `${skill.layer} — ${skill.agents.join(', ') || 'not linked'}`,
-      })),
-      { label: 'Back', value: '__back' },
-      { label: 'Exit', value: '__exit' },
-    ],
-  });
+  while (true) {
+    const result = await cuiMultiSelectPrompt<number>({
+      message: 'Skill:',
+      maxVisible: 10,
+      options: [
+        ...skills.map((skill, index) => ({
+          label: skill.name,
+          value: index,
+          description: `${skill.layer} — ${skill.agents.join(', ') || 'not linked'}`,
+        })),
+        { label: 'Back', value: -1, description: 'Return to previous menu' },
+        { label: 'Exit', value: -2, description: 'Quit the CUI' },
+      ],
+    });
 
-  if (selected === '__exit') return 'exit';
-  if (selected === '__back') return 'continue';
-  const skill = skills.find((item) => item.name === selected);
-  if (!skill) return 'continue';
-  const actionResult = await promptSkillAction(actions, options, skill);
-  if (actionResult === 'exit') return 'exit';
-  if (typeof actionResult === 'object') return actionResult;
-  return 'continue';
+    if (result.type === 'single') {
+      if (result.value === -2) return 'exit';
+      if (result.value === -1) return 'continue';
+      const skill = skills[result.value];
+      if (!skill) return 'continue';
+      const actionResult = await promptSkillAction(actions, options, skill);
+      if (actionResult === 'exit') return 'exit';
+      if (typeof actionResult === 'object') return actionResult;
+      return 'continue';
+    }
+
+    if (result.values.includes(-2)) return 'exit';
+    if (result.values.includes(-1)) return 'continue';
+    const selectedSkills = result.values
+      .map((index) => skills[index])
+      .filter((skill): skill is CuiInstalledSkill => Boolean(skill));
+    if (selectedSkills.length === 0) return 'continue';
+    const bulkResult = await promptBulkSkillAction(actions, options, selectedSkills, skills);
+    if (bulkResult === 'exit') return 'exit';
+    if (bulkResult === 'clear') continue;
+    if (typeof bulkResult === 'object') return bulkResult;
+    return 'continue';
+  }
 }
 
 async function runSingleCommand(

@@ -9,6 +9,42 @@ export function formatAgentNames(agentIds: AgentType[]): string {
   return agentIds.map((agent) => agents[agent]?.displayName ?? agent).join(', ');
 }
 
+function formatOptional(label: string, value: string | undefined): string {
+  return `${label}: ${value && value.trim() ? value : 'not specified'}`;
+}
+
+function formatHash(skill: CuiInstalledSkill): string | undefined {
+  if (!skill.hash) return undefined;
+  return `${skill.hashKind ?? 'hash'} ${skill.hash}`;
+}
+
+export function formatSkillDetails(skill: CuiInstalledSkill): string[] {
+  const source = skill.sourceUrl ?? skill.source;
+  const versionParts = [skill.ref ? `ref ${skill.ref}` : undefined, formatHash(skill)].filter(
+    Boolean
+  );
+  const metadataLines = [
+    `Name: ${skill.name}`,
+    formatOptional('Description', skill.description),
+    formatOptional('Triggers', skill.triggers?.length ? skill.triggers.join(', ') : undefined),
+    `Layer: ${skill.layer}`,
+    `Agents: ${formatAgentNames(skill.agents)}`,
+    formatOptional('Path', skill.path),
+    formatOptional('Source', source),
+    formatOptional('Source type', skill.sourceType),
+    formatOptional('Skill path', skill.skillPath),
+    formatOptional('Version/hash', versionParts.length ? versionParts.join(' • ') : undefined),
+    formatOptional('Plugin', skill.pluginName),
+  ];
+
+  if (skill.installedAt || skill.updatedAt) {
+    metadataLines.push(formatOptional('Installed', skill.installedAt));
+    metadataLines.push(formatOptional('Updated', skill.updatedAt));
+  }
+
+  return metadataLines;
+}
+
 export function formatInstalledSkills(
   skills: CuiInstalledSkill[],
   layers: SkillLayer[] = LAYERS

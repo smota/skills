@@ -137,7 +137,7 @@ If you want only the guided UI without installing this package first, run:
 npx skill-cui
 ```
 
-`skill-cui` is a standalone wrapper that invokes the public `npx skills` command and parses structured output where available. It intentionally does not import private `skills` internals. Standalone search currently requires keywords; for open interactive search, run `npx skills find` directly.
+`skill-cui` is a standalone wrapper that invokes the public `npx skills` command and parses structured output where available. It intentionally does not import private `skills` internals. The standalone package is published from the `smota/skills` fork with attribution to the upstream `vercel-labs/skills` project. Standalone search currently requires keywords; for open interactive search, run `npx skills find` directly.
 
 ### `skills list`
 

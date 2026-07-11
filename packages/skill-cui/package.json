@@ -1,7 +1,7 @@
 {
   "name": "skill-cui",
   "version": "1.5.16",
-  "description": "Standalone CUI for the skills CLI",
+  "description": "Standalone CUI for the skills CLI, published from the smota/skills fork",
   "type": "module",
   "bin": {
     "skill-cui": "./bin/skill-cui.mjs"
@@ -10,6 +10,31 @@
     "bin",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smota/skills.git",
+    "directory": "packages/skill-cui"
+  },
+  "homepage": "https://github.com/smota/skills/tree/main/packages/skill-cui#readme",
+  "bugs": {
+    "url": "https://github.com/smota/skills/issues"
+  },
+  "keywords": [
+    "skills",
+    "agent-skills",
+    "cui",
+    "terminal-ui",
+    "cli",
+    "ai-agents"
+  ],
+  "author": "smota",
+  "contributors": [
+    "smota",
+    "vercel-labs/skills contributors"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "@vr_patel/tui": "^1.0.0"
   },

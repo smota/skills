@@ -1,8 +1,13 @@
+import { join } from 'path';
 import { parseAddOptions, runAdd } from '../add.ts';
 import { agents } from '../agents.ts';
 import { searchSkillsAPI } from '../find.ts';
 import { listInstalledSkills } from '../installer.ts';
+import { readLocalLock } from '../local-lock.ts';
 import { removeCommand } from '../remove.ts';
+import { sanitizeMetadata } from '../sanitize.ts';
+import { parseSkillMd } from '../skills.ts';
+import { getAllLockedSkills } from '../skill-lock.ts';
 import type { AgentType } from '../types.ts';
 import { runUpdate } from '../update.ts';
 import type {
@@ -34,6 +39,28 @@ function layerFilterToUpdateArgs(layer: CuiUpdateRequest['layer']): string[] {
   return [];
 }
 
+function stringArray(value: unknown): string[] {
+  if (typeof value === 'string') return [sanitizeMetadata(value)];
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => sanitizeMetadata(item))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function activationHints(metadata: Record<string, unknown> | undefined): string[] {
+  if (!metadata) return [];
+  return [
+    ...stringArray(metadata.triggers),
+    ...stringArray(metadata.trigger),
+    ...stringArray(metadata.activation),
+    ...stringArray(metadata.activationHints),
+    ...stringArray(metadata.whenToUse),
+  ];
+}
+
 export class CoreCuiBackend implements CuiBackend {
   async list(request: CuiListRequest): Promise<CuiInstalledSkill[]> {
     const layers = layerFilterToListLayers(request.layer);
@@ -46,12 +73,46 @@ export class CoreCuiBackend implements CuiBackend {
       )
     );
 
-    return results.flat().map((skill) => ({
-      name: skill.name,
-      layer: skill.scope,
-      agents: skill.agents,
-      path: skill.canonicalPath,
-    }));
+    const [localLock, globalLock] = await Promise.all([readLocalLock(), getAllLockedSkills()]);
+    const metadataByPath = await Promise.all(
+      results.flat().map(async (skill) => ({
+        skill,
+        parsed: await parseSkillMd(join(skill.canonicalPath, 'SKILL.md'), {
+          includeInternal: true,
+        }),
+      }))
+    );
+
+    return metadataByPath.map(({ skill, parsed }) => {
+      const localEntry = skill.scope === 'project' ? localLock.skills[skill.name] : undefined;
+      const globalEntry = skill.scope === 'global' ? globalLock[skill.name] : undefined;
+      const metadata = parsed?.metadata;
+      const lockEntry = localEntry ?? globalEntry;
+
+      return {
+        name: skill.name,
+        layer: skill.scope,
+        agents: skill.agents,
+        path: skill.canonicalPath,
+        description: skill.description,
+        metadata,
+        triggers: activationHints(metadata),
+        source: lockEntry?.source,
+        sourceUrl: lockEntry?.sourceUrl,
+        sourceType: lockEntry?.sourceType,
+        ref: lockEntry?.ref,
+        skillPath: lockEntry?.skillPath,
+        hash: localEntry?.computedHash ?? globalEntry?.skillFolderHash,
+        hashKind: localEntry
+          ? ('computedHash' as const)
+          : globalEntry
+            ? ('skillFolderHash' as const)
+            : undefined,
+        pluginName: globalEntry?.pluginName,
+        installedAt: globalEntry?.installedAt,
+        updatedAt: globalEntry?.updatedAt,
+      };
+    });
   }
 
   async search(request: CuiSearchRequest): Promise<CuiSearchResult[]> {
